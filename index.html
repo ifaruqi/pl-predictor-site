@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premier League Predictor</title>
+<meta name="description" content="Win, draw and scoreline probabilities for every Premier League match, updated daily.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='44' fill='%23155eef'/%3E%3Cpath d='M50 22l14 10-5 17H41l-5-17z' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f7f8fa; --surface: #ffffff; --surface-2: #f1f3f6; --border: #e3e6eb;
+  --text: #14171c; --muted: #5d6573; --accent: #155eef;
+  --home: #155eef; --draw: #8a93a3; --away: #e8590c;
+  --good: #067647; --good-bg: #e7f6ec; --bad: #b42318;
+  --heat: 21 94 239; --heat-bad: 217 45 32; --focus: #155eef55;
+  --radius: 12px; --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 8%);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --surface: #161a21; --surface-2: #1d222b; --border: #2a303b;
+    --text: #e8ebf0; --muted: #9aa3b2; --accent: #6b9bff;
+    --home: #5b8cff; --draw: #7d8696; --away: #ff8a4c;
+    --good: #47cd89; --good-bg: #0f2a1d; --bad: #f97066;
+    --heat: 107 155 255; --heat-bad: 249 112 102; --focus: #6b9bff66;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; }
+header { padding: 28px 0 8px; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0 0 4px; letter-spacing: -0.01em; }
+.sub { color: var(--muted); margin: 0; font-size: 14px; }
+nav { display: flex; gap: 4px; margin: 20px 0 16px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+nav button {
+  background: none; border: 0; color: var(--muted); font: inherit; font-weight: 600;
+  padding: 10px 12px; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap;
+}
+@media (max-width: 420px) { nav { gap: 0; } nav button { padding: 10px 6px; font-size: 14px; } }
+@media (max-width: 370px) { nav button { padding: 10px 4px; font-size: 13.5px; } }
+nav button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+button:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+section[hidden] { display: none; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); margin-bottom: 10px;
+}
+details > summary { list-style: none; cursor: pointer; padding: 14px 16px; }
+details > summary::-webkit-details-marker { display: none; }
+.match-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.teams { font-weight: 650; font-size: 16px; flex: 1 1 auto; }
+.vs { color: var(--muted); font-weight: 400; padding: 0 4px; }
+.meta { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; margin: 10px 0 6px; background: var(--surface-2); }
+.bar span { display: block; height: 100%; }
+.bar .h { background: var(--home); } .bar .d { background: var(--draw); } .bar .a { background: var(--away); }
+.probs { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); gap: 8px; }
+.probs b { color: var(--text); font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+.dot.h { background: var(--home); } .dot.d { background: var(--draw); } .dot.a { background: var(--away); }
+.chev { color: var(--muted); font-size: 12px; margin-left: auto; transition: transform .15s; }
+details[open] .chev { transform: rotate(180deg); }
+.detail { padding: 0 16px 16px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 20px; }
+@media (max-width: 620px) { .detail { grid-template-columns: 1fr; } }
+h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 6px 0 8px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.scores td { padding: 5px 0; border-bottom: 1px solid var(--border); }
+.scores td:last-child { text-align: right; color: var(--muted); }
+.heat { table-layout: fixed; font-size: 12px; }
+.heat th { color: var(--muted); font-weight: 500; padding: 4px 0; text-align: center; }
+.heat td { text-align: center; padding: 7px 0; border: 2px solid var(--surface); border-radius: 6px; }
+.axis { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+.xg { font-size: 14px; margin: 2px 0 10px; }
+.big3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 12px; }
+.big3 > div { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+.big3 .lab { font-size: 12px; color: var(--muted); line-height: 1.3; overflow-wrap: anywhere; min-height: 2.6em; }
+.big3 .val { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pickers { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: end; margin-bottom: 14px; }
+label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+select {
+  width: 100%; font: inherit; line-height: 1.3; color: var(--text); background-color: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 34px 10px 12px;
+  /* One box in every browser: drop the native control and draw the chevron ourselves. */
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238a93a3' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 8px;
+}
+.swap { font: inherit; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.pad { padding: 16px; }
+.note { color: var(--muted); font-size: 13px; }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.stats > div { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.stats .val { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.record { font-size: 14px; }
+.record th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+.record td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.record .num { text-align: right; }
+#record h2 { font-size: 18px; margin: 22px 0 8px; }
+.record tbody tr.pick-gw:hover td { background: var(--surface-2); }
+#record h3 { margin-top: 18px; }
+.sim { font-size: 14px; font-variant-numeric: tabular-nums; }
+.sim th { color: var(--muted); font-weight: 500; font-size: 12px; padding: 8px 4px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.sim th.l, .sim td.l { text-align: left; }
+.sim td { padding: 6px 4px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.sim td.p { min-width: 46px; border-radius: 6px; border: 2px solid var(--surface); }
+.sim .rng { display: block; font-size: 11px; color: var(--muted); }
+.sim .team { font-weight: 600; }
+.sim tr.cut td { border-bottom: 2px solid var(--muted); }
+@media (max-width: 560px) { .sim .wide { display: none; } .sim { font-size: 13px; } .sim td.p { min-width: 40px; } }
+.stats.three { grid-template-columns: repeat(3, 1fr); }
+.record tbody tr.pick-gw { cursor: pointer; }
+.record tfoot td { font-weight: 600; border-bottom: 0; }
+.tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
+.gws { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.gws button { font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.gws button[aria-pressed="true"] { color: var(--surface); background: var(--text); border-color: var(--text); }
+.gws button:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.mrow { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.mrow:last-child { border-bottom: 0; }
+.mtop { display: flex; gap: 10px; align-items: baseline; }
+.mtop .teams { font-weight: 600; flex: 1; min-width: 0; }
+.mtop .res { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mrow .bar span { opacity: .28; } .mrow .bar span.won { opacity: 1; }
+.mbot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.chip { font-size: 12px; font-weight: 600; border-radius: 6px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
+.chip.ok { color: var(--good); background: var(--good-bg); } .chip.no { color: var(--bad); border: 1px solid var(--border); }
+.record .nowrap { white-space: nowrap; }
+@media (max-width: 620px) {
+  .record { font-size: 13px; }
+  .record th, .record td { padding: 8px 4px; }
+  .record .wide { display: none; }
+}
+.scroll { overflow-x: auto; }
+.prose p, .prose li { max-width: 68ch; }
+.prose h2 { font-size: 17px; margin: 18px 0 6px; }
+footer { color: var(--muted); font-size: 12px; margin-top: 28px; }
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Premier League Predictor</h1>
+    <p class="sub" id="freshness">Loading…</p>
+  </header>
+
+  <nav role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-next" aria-controls="next" aria-selected="true">Matches</button>
+    <button role="tab" id="tab-custom" aria-controls="custom" aria-selected="false">Predict</button>
+    <button role="tab" id="tab-table" aria-controls="table" aria-selected="false">Table</button>
+    <button role="tab" id="tab-record" aria-controls="record" aria-selected="false">Track record</button>
+    <button role="tab" id="tab-about" aria-controls="about" aria-selected="false">About</button>
+  </nav>
+
+  <section id="next" role="tabpanel" aria-labelledby="tab-next"></section>
+
+  <section id="custom" role="tabpanel" aria-labelledby="tab-custom" hidden>
+    <div class="pickers">
+      <div><label for="home">Home</label><select id="home"></select></div>
+      <button class="swap" id="swap" type="button" aria-label="Swap home and away">⇄</button>
+      <div><label for="away">Away</label><select id="away"></select></div>
+    </div>
+    <div class="card" id="custom-out"></div>
+    <p class="note">Probabilities for a match played today at the home side's ground.</p>
+  </section>
+
+  <section id="table" role="tabpanel" aria-labelledby="tab-table" hidden></section>
+  <section id="record" role="tabpanel" aria-labelledby="tab-record" hidden></section>
+
+  <section id="about" role="tabpanel" aria-labelledby="tab-about" hidden>
+    <div class="card pad prose">
+      <h2>What you're looking at</h2>
+      <p>For every Premier League match: the probability of a home win, a draw and an away win,
+        each team's expected goals, and the chance of every exact score. Predictions are refreshed
+        every day as results come in.</p>
+      <h2>How to read it</h2>
+      <ul>
+        <li><b>Probabilities, not certainties.</b> A 60% favourite fails to win about four times in ten.</li>
+        <li><b>The score pick</b> ("if Chelsea win: 2–1") is the most likely score <i>if</i> the most likely result
+          happens. Exact scores are hard: even the best pick comes true only about one time in nine.
+          The single most likely score overall is 1–1 in most matches, because a draw has few ways to happen
+          and they bunch up there, while a win is spread across many scores.</li>
+        <li><b>Expected goals</b> is the average number of goals a team would score if the match were played many times.</li>
+      </ul>
+      <h2>How good is it?</h2>
+      <p>Every prediction is saved before kick-off and scored afterwards; see <b>Track record</b>.
+        In tests on more than 2,700 past Premier League matches, the predictions were close to the
+        bookmakers' in accuracy.</p>
+      <h2>Small print</h2>
+      <p>For information and entertainment, not betting advice. Results and fixtures from
+        <a href="https://www.football-data.co.uk" rel="noopener">football-data.co.uk</a> and
+        <a href="https://github.com/openfootball" rel="noopener">openfootball</a>.</p>
+    </div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const pct = (x) => `${Math.round(x * 100)}%`;
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmtDate = (iso, opts = { weekday: "short", day: "numeric", month: "short" }) =>
+    new Date(iso + "T12:00:00Z").toLocaleDateString(undefined, opts);
+
+  // Tabs
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function select(tab) {
+    tabs.forEach((t) => {
+      const on = t === tab;
+      t.setAttribute("aria-selected", on);
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+    });
+    try { history.replaceState(null, "", "#" + tab.getAttribute("aria-controls")); } catch (e) {}
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener("click", () => select(t));
+    t.addEventListener("keydown", (e) => {
+      const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (d) { const n = tabs[(i + d + tabs.length) % tabs.length]; n.focus(); select(n); }
+    });
+  });
+  const initial = tabs.find((t) => "#" + t.getAttribute("aria-controls") === location.hash);
+  select(initial || tabs[0]);
+
+  function bar(p) {
+    return `<div class="bar" aria-hidden="true"><span class="h" style="width:${p[0] * 100}%"></span>` +
+      `<span class="d" style="width:${p[1] * 100}%"></span><span class="a" style="width:${p[2] * 100}%"></span></div>`;
+  }
+  function probs(home, away, p) {
+    return `<div class="probs"><span><span class="dot h"></span>${esc(home)} <b>${pct(p[0])}</b></span>` +
+      `<span><span class="dot d"></span>Draw <b>${pct(p[1])}</b></span>` +
+      `<span><span class="dot a"></span>${esc(away)} <b>${pct(p[2])}</b></span></div>`;
+  }
+  function heat(grid, home, away) {
+    const max = Math.max(...grid.flat());
+    let h = `<table class="heat" aria-label="Probability of each score, ${esc(home)} goals down, ${esc(away)} goals across">` +
+      `<tr><th></th>${grid[0].map((_, j) => `<th scope="col">${j}</th>`).join("")}</tr>`;
+    grid.forEach((row, i) => {
+      h += `<tr><th scope="row">${i}</th>` + row.map((v, j) => {
+        const a = (0.06 + 0.84 * (v / max)).toFixed(2);
+        const strong = v / max > 0.55;
+        return `<td title="${esc(home)} ${i}–${j} ${esc(away)}: ${(v * 100).toFixed(1)}%" ` +
+          `style="background:rgb(var(--heat) / ${a});${strong ? "color:#fff;font-weight:600" : ""}">${v < 0.005 ? "·" : (v * 100).toFixed(0)}</td>`;
+      }).join("") + "</tr>";
+    });
+    return h + `</table><p class="axis">${esc(home)} goals ↓ · ${esc(away)} goals → · percent</p>`;
+  }
+  // "If Chelsea win: 2–1": the likeliest score within the most likely result.
+  function pickLabel(m) {
+    const who = m.pick.result === "home" ? m.home : m.pick.result === "away" ? m.away : null;
+    return who ? `if ${esc(who)} win` : "if it's a draw";
+  }
+  function pickScore(m) { return `${m.pick.score[0]}–${m.pick.score[1]}`; }
+
+  function detail(m) {
+    const scores = m.top.map(([h, a, p]) => `<tr><td>${h}–${a}</td><td>${(p * 100).toFixed(1)}%</td></tr>`).join("");
+    return `<div class="detail"><div><h3>Most likely exact scores</h3><table class="scores">${scores}</table></div>` +
+      `<div><h3>Every score</h3>${heat(m.grid, m.home, m.away)}</div></div>`;
+  }
+  function big3(m) {
+    return `<div class="big3"><div><div class="lab">${esc(m.home)} win</div><div class="val">${pct(m.p[0])}</div></div>` +
+      `<div><div class="lab">Draw</div><div class="val">${pct(m.p[1])}</div></div>` +
+      `<div><div class="lab">${esc(m.away)} win</div><div class="val">${pct(m.p[2])}</div></div></div>`;
+  }
+
+  function renderNext(data) {
+    const el = $("#next");
+    if (!data.fixtures.length) {
+      el.innerHTML = `<div class="card empty">No Premier League fixtures scheduled in the next few days.<br>Try <b>Predict</b>.</div>`;
+      return;
+    }
+    let lastDate = "";
+    el.innerHTML = data.fixtures.map((m) => {
+      const head = m.date !== lastDate ? `<h3>${fmtDate(m.date, { weekday: "long", day: "numeric", month: "long" })}</h3>` : "";
+      lastDate = m.date;
+      return head + `<details class="card"><summary><div class="match-head">` +
+        `<span class="teams">${esc(m.home)}<span class="vs">v</span>${esc(m.away)}</span>` +
+        `<span class="meta">xG ${m.xg[0].toFixed(1)}–${m.xg[1].toFixed(1)} · ${pickLabel(m)}: <b>${pickScore(m)}</b></span>` +
+        `<span class="chev" aria-hidden="true">▾</span></div>${bar(m.p)}${probs(m.home, m.away, m.p)}</summary>` +
+        detail(m) + `</details>`;
+    }).join("");
+  }
+
+  function renderCustom(data) {
+    const home = $("#home"), away = $("#away");
+    const opts = data.teams.map((t) => `<option>${esc(t)}</option>`).join("");
+    home.innerHTML = opts; away.innerHTML = opts;
+    home.value = data.teams[0]; away.value = data.teams[1];
+    function draw() {
+      const out = $("#custom-out");
+      if (home.value === away.value) {
+        out.innerHTML = `<div class="empty">Pick two different teams.</div>`;
+        return;
+      }
+      const m = { home: home.value, away: away.value, ...data.matchups[`${home.value}|${away.value}`] };
+      out.innerHTML = `<div class="pad">${big3(m)}${bar(m.p)}` +
+        `<p class="xg">Expected goals: <b>${esc(m.home)} ${m.xg[0].toFixed(2)} – ${m.xg[1].toFixed(2)} ${esc(m.away)}</b><br>` +
+        `Prediction: ${pickLabel(m)}, most likely <b>${pickScore(m)}</b> ` +
+        `<span class="note">(${pct(m.pick.p_given)} of those wins end ${pickScore(m)})</span></p></div>` +
+        detail(m);
+    }
+    home.addEventListener("change", draw); away.addEventListener("change", draw);
+    $("#swap").addEventListener("click", () => { [home.value, away.value] = [away.value, home.value]; draw(); });
+    draw();
+  }
+
+  function stats(s) {
+    return `<div class="stats">` +
+      `<div><div class="note">Matches scored</div><div class="val">${s.matches}</div></div>` +
+      `<div><div class="note">Average RPS</div><div class="val">${s.rps.toFixed(3)}</div></div>` +
+      `<div><div class="note">Result called right</div><div class="val">${pct(s.accuracy)}</div></div>` +
+      `<div><div class="note">Exact score right</div><div class="val">${pct(s.exact)}</div></div></div>`;
+  }
+
+  function baselines(s) {
+    const rows = [];
+    if (s.with_market && s.rps_market !== null) {
+      rows.push(`<tr><td>Bookmakers' favourite</td><td class="num">${pct(s.accuracy_favourite)}</td>` +
+        `<td class="num">${s.rps_market.toFixed(3)}</td><td class="num wide">–</td></tr>`);
+    }
+    rows.push(`<tr><td>Always the home team</td><td class="num">${pct(s.accuracy_home)}</td><td class="num">–</td><td class="num wide">–</td></tr>`);
+    rows.push(`<tr><td>Always 1–1</td><td class="num">${pct(s.accuracy_draw)}</td><td class="num">–</td><td class="num wide">${pct(s.exact_1_1)}</td></tr>`);
+    const same = s.with_market && s.with_market < s.matches ? ` (bookmakers: the ${s.with_market} matches with prices at the time)` : "";
+    return `<h3>Compared with simple rules${same}</h3><div class="card scroll"><table class="record"><thead><tr><th></th>` +
+      `<th class="num">Result right</th><th class="num">RPS</th><th class="num wide">Exact score</th></tr></thead><tbody>` +
+      `<tr><td><b>This model</b></td><td class="num"><b>${pct(s.accuracy)}</b></td><td class="num"><b>${s.rps.toFixed(3)}</b></td>` +
+      `<td class="num wide"><b>${pct(s.exact)}</b></td></tr>` + rows.join("") + `</tbody></table></div>`;
+  }
+
+  function matchRows(matches) {
+    return `<div class="card">` + matches.map((m) => {
+      const seg = ["h", "d", "a"].map((c, i) =>
+        `<span class="${c}${i === m.outcome ? " won" : ""}" style="width:${m.p[i] * 100}%"></span>`).join("");
+      return `<div class="mrow"><div class="mtop"><span class="meta">${fmtDate(m.date)}</span>` +
+        `<span class="teams">${esc(m.home)} – ${esc(m.away)}</span><span class="res">${esc(m.result).replace("-", "–")}</span></div>` +
+        `<div class="bar" aria-hidden="true">${seg}</div>` +
+        `<div class="mbot"><span>${m.p.map((x) => Math.round(x * 100) + "%").join(" · ")}</span>` +
+        `<span>Pick ${esc(m.pick).replace("-", "–")}` +
+        `<span class="chip ${m.ok ? "ok" : "no"}">${m.ok ? "✓" : "✗"} result</span>` +
+        (m.exact ? `<span class="chip ok">✓ exact score</span>` : "") + `</span></div></div>`;
+    }).join("") + `</div>`;
+  }
+
+  function renderTable(data) {
+    const el = $("#table"), t = data.table;
+    if (!t || !t.predicted.length) { el.innerHTML = `<div class="card empty">No table available.</div>`; return; }
+    const fmt = (p) => p <= 0 ? "–" : p < 0.005 ? "<1%" : p > 0.995 && p < 1 ? ">99%" : pct(p);
+    const cell = (p, bad, cls = "") => {
+      const a = Math.min(p, 1) * 0.85;
+      return `<td class="p ${cls}" style="background:rgb(var(${bad ? "--heat-bad" : "--heat"}) / ${a.toFixed(3)});` +
+        `${a > 0.45 ? "color:#fff;font-weight:600" : ""}">${fmt(p)}</td>`;
+    };
+    const cut = (i) => i === 3 || i === 16 ? ' class="cut"' : "";
+    const through = fmtDate(data.results_through, { day: "numeric", month: "short" });
+
+    const predicted = () => `<p class="note"><b>Predicted final table</b> from 10,000 simulated seasons: the current
+        table plus every remaining match played out with the predicted probabilities, allowing for teams turning out
+        better or worse than they look now. Ordered by expected points.</p>` +
+      `<div class="card scroll"><table class="sim"><thead><tr><th class="l">#</th><th class="l">Team</th>` +
+      `<th>Points</th><th>Title</th><th>Top 4</th><th class="wide">Top 5</th><th>Relegated</th></tr></thead><tbody>` +
+      t.predicted.map((r, i) => `<tr${cut(i)}><td class="l">${i + 1}</td><td class="l team">${esc(r.team)}</td>` +
+        `<td>${Math.round(r.exp_pts)}<span class="rng">${r.range[0]}–${r.range[1]}</span></td>` +
+        cell(r.title) + cell(r.top4) + cell(r.top5, false, "wide") + cell(r.relegation, true) + `</tr>`).join("") +
+      `</tbody></table></div>` +
+      `<p class="note"><b>Points</b>: expected final points; below it, the range 8 in 10 simulated seasons ended in.
+        <b>How reliable?</b> Replayed on 11 past seasons from various points in the season, about 8 in 10 teams finished
+        inside their range, and top-4 and relegation chances matched how often those things happened. Title chances are
+        harder to check: there is only one champion a season.</p>`;
+
+    const current = () => `<p class="note"><b>Current table</b> after ${t.played} matches (results through ${through}).
+        No predictions here.</p>` +
+      `<div class="card scroll"><table class="sim"><thead><tr><th class="l">#</th><th class="l">Team</th>` +
+      `<th>P</th><th class="wide">W</th><th class="wide">D</th><th class="wide">L</th><th class="wide">GF</th>` +
+      `<th class="wide">GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>` +
+      t.current.map((r, i) => `<tr${cut(i)}><td class="l">${i + 1}</td><td class="l team">${esc(r.team)}</td>` +
+        `<td>${r.played}</td><td class="wide">${r.won}</td><td class="wide">${r.drawn}</td><td class="wide">${r.lost}</td>` +
+        `<td class="wide">${r.gf}</td><td class="wide">${r.ga}</td><td>${r.gd > 0 ? "+" : ""}${r.gd}</td>` +
+        `<td><b>${r.pts}</b></td></tr>`).join("") +
+      `</tbody></table></div>`;
+
+    el.innerHTML = `<div class="gws" role="group" aria-label="Table view">` +
+      `<button type="button" data-view="predicted" aria-pressed="true">Predicted</button>` +
+      `<button type="button" data-view="current" aria-pressed="false">Current</button></div><div id="table-view"></div>`;
+    const show = (v) => {
+      el.querySelectorAll(".gws button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
+      $("#table-view").innerHTML = v === "current" ? current() : predicted();
+    };
+    el.querySelectorAll(".gws button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
+    show("predicted");
+  }
+
+  function renderRecord(data) {
+    const live = data.track_record, rec = data.reconstructed || { matches: [], by_gw: [], summary: {} }, el = $("#record");
+    const day = (d) => fmtDate(d, { day: "numeric", month: "short" });
+    const gws = [...rec.by_gw.map((g) => ({ ...g, recon: true })), ...(live.by_gw || []).map((g) => ({ ...g, recon: false }))]
+      .sort((x, y) => x.gw - y.gw);
+    const matches = [...rec.matches, ...live.matches];
+    const tag = `<span class="tag">reconstructed</span>`;
+
+    const liveStatus = () => {
+      if (live.matches.length) return stats(live.summary);
+      const since = live.since ? `Logging started on ${day(live.since)}. ` : "";
+      const first = live.first_match ? `The first logged matches (from ${day(live.first_match)}) are scored ` : "Matches are scored ";
+      return `<div class="card empty">${since}${first}once their results are published.
+        Results currently run through ${day(data.results_through)}.</div>`;
+    };
+
+    const summary = () => {
+      let html = `<p class="note">Each prediction is saved before match day and scored once the result is in.
+        <b>Result</b>: the most likely outcome happened. <b>Exact score</b>: the pick was spot on.
+        <b>RPS</b> scores the probabilities: 0 is perfect, around 0.20 is typical for good forecasts.</p>` +
+        `<h3>Live</h3>` + liveStatus();
+      if (!gws.length) return html;
+      const row = (g) => `<tr class="pick-gw" data-gw="${g.gw}"><td>GW${g.gw}${g.recon ? tag : ""}</td>` +
+        `<td class="num">${pct(g.accuracy)}</td><td class="num">${pct(g.exact)}</td><td class="num wide">${g.rps.toFixed(3)}</td></tr>`;
+      const total = (label, s) => s && s.matches ? `<tr><td>${label}</td><td class="num">${pct(s.accuracy)}</td>` +
+        `<td class="num">${pct(s.exact)}</td><td class="num wide">${s.rps.toFixed(3)}</td></tr>` : "";
+      html += `<h3>By gameweek</h3><div class="card scroll"><table class="record"><thead><tr><th>Gameweek</th>` +
+        `<th class="num">Result right</th><th class="num">Exact score</th><th class="num wide">RPS</th></tr></thead>` +
+        `<tbody>${gws.map(row).join("")}</tbody><tfoot>` +
+        total(`Reconstructed (${rec.summary.matches || 0})`, rec.summary) + total(`Live (${live.summary.matches || 0})`, live.summary) +
+        `</tfoot></table></div>`;
+      if (rec.matches.length) {
+        html += `<p class="note"><b>Reconstructed</b>: played before live logging began; predictions recreated afterwards
+          from information available before each match. Ten matches per gameweek is a tiny sample.</p>`;
+      }
+      const base = live.matches.length ? live.summary : rec.summary;
+      return html + baselines(base).replace("<h3>Compared with simple rules",
+        `<h3>Compared with simple rules, ${live.matches.length ? "live" : "reconstructed"}`);
+    };
+
+    const gameweek = (gw) => {
+      const g = gws.find((x) => x.gw === gw);
+      return `<div class="stats three">` +
+        `<div><div class="note">Result right</div><div class="val">${pct(g.accuracy)}</div></div>` +
+        `<div><div class="note">Exact score</div><div class="val">${pct(g.exact)}</div></div>` +
+        `<div><div class="note">RPS</div><div class="val">${g.rps.toFixed(3)}</div></div></div>` +
+        (g.recon ? `<p class="note">${tag} Recreated afterwards, not published before kick-off.</p>` : "") +
+        matchRows(matches.filter((m) => m.gw === gw));
+    };
+
+    el.innerHTML = `<div class="gws" role="group" aria-label="Track record view">` +
+      `<button type="button" data-view="summary" aria-pressed="false">Summary</button>` +
+      gws.map((g) => `<button type="button" data-view="${g.gw}" aria-pressed="false">GW${g.gw}</button>`).join("") +
+      `</div><div id="record-view"></div>`;
+    const view = $("#record-view");
+    const show = (v) => {
+      el.querySelectorAll(".gws button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === String(v))));
+      view.innerHTML = v === "summary" ? summary() : gameweek(+v);
+      view.querySelectorAll("tr.pick-gw").forEach((r) => r.addEventListener("click", () => show(r.dataset.gw)));
+    };
+    el.querySelectorAll(".gws button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
+    show("summary");
+  }
+
+  fetch("data.json", { cache: "no-cache" })
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then((data) => {
+      $("#freshness").textContent =
+        `${data.season} season · results through ${fmtDate(data.results_through, { day: "numeric", month: "short", year: "numeric" })}`;
+      $("#footer").textContent = `Updated ${new Date(data.generated).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`;
+      renderNext(data); renderCustom(data); renderTable(data); renderRecord(data);
+    })
+    .catch(() => { $("#freshness").textContent = "Couldn't load predictions. Please try again later."; });
+})();
+</script>
+</body>
+</html>
