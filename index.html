@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premier League Predictor</title>
+<meta name="description" content="Win, draw and scoreline probabilities for every Premier League match, updated daily.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='44' fill='%23155eef'/%3E%3Cpath d='M50 22l14 10-5 17H41l-5-17z' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f7f8fa; --surface: #ffffff; --surface-2: #f1f3f6; --border: #e3e6eb;
+  --text: #14171c; --muted: #5d6573; --accent: #155eef; --title: #0b1f44;
+  --home: #155eef; --draw: #8a93a3; --away: #e8590c; --away-text: #c2410c;
+  --good: #067647; --good-bg: #e7f6ec; --bad: #b42318;
+  --heat: 21 94 239; --heat-bad: 217 45 32; --focus: #155eef55;
+  --radius: 12px; --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 8%);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116; --surface: #161a21; --surface-2: #1d222b; --border: #2a303b;
+    --text: #e8ebf0; --muted: #9aa3b2; --accent: #6b9bff; --title: #f2f5fa;
+    --home: #5b8cff; --draw: #7d8696; --away: #ff8a4c; --away-text: #ff8a4c;
+    --good: #47cd89; --good-bg: #0f2a1d; --bad: #f97066;
+    --heat: 107 155 255; --heat-bad: 249 112 102; --focus: #6b9bff66;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; }
+header { padding: 28px 0 8px; }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
+  margin: 0 0 6px; min-height: 1.5em; }
+h1 { font-size: 30px; line-height: 1.1; margin: 0 0 8px; letter-spacing: -0.025em; font-weight: 800; color: var(--title); }
+.sub { color: var(--muted); margin: 0; font-size: 13px; }
+.nw { white-space: nowrap; }
+@media (max-width: 420px) { h1 { font-size: 26px; } }
+nav { display: flex; gap: 4px; margin: 20px 0 16px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+nav button {
+  background: none; border: 0; color: var(--muted); font: inherit; font-weight: 600;
+  padding: 10px 12px; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap;
+}
+@media (max-width: 420px) { nav { gap: 0; } nav button { padding: 10px 6px; font-size: 14px; } }
+@media (max-width: 370px) { nav button { padding: 10px 4px; font-size: 13.5px; } }
+nav .sm { display: none; }
+@media (max-width: 380px) { nav .lg { display: none; } nav .sm { display: inline; } }
+nav button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+button:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+section[hidden] { display: none; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); margin-bottom: 10px;
+}
+#next > h3 { margin: 26px 0 8px; } #next > h3:first-child { margin-top: 4px; }
+/* Closed fixtures sit flat (border only); the one you open lifts. */
+#next details.card { margin-bottom: 8px; box-shadow: none; transition: box-shadow .15s; }
+#next details.card:hover { border-color: var(--draw); }
+#next details[open].card { box-shadow: 0 6px 20px rgb(16 24 40 / 12%); border-color: var(--border); }
+details > summary { list-style: none; cursor: pointer; padding: 14px 16px; }
+details > summary::-webkit-details-marker { display: none; }
+.match-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.teams { font-weight: 650; font-size: 17px; flex: 1 1 auto; letter-spacing: -0.01em; }
+.vs { color: var(--muted); font-weight: 400; padding: 0 4px; }
+.meta { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; margin: 10px 0 6px; background: var(--surface-2); }
+.bar span { display: block; height: 100%; }
+.bar .h { background: var(--home); } .bar .d { background: var(--draw); } .bar .a { background: var(--away); }
+/* Match cards: Home / Draw / Away in three aligned columns, the percentages the focal point. */
+.out3 { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; margin-top: 10px; }
+.out3 > div { display: flex; flex-direction: column-reverse; min-width: 0; }  /* name read first, number shown first */
+.out3 > div:nth-child(2) { align-items: center; } .out3 > div:last-child { align-items: flex-end; }
+.out3 .pc { display: block; font-size: 22px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.out3 .who { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.out3 .h .pc { color: var(--home); } .out3 .a .pc { color: var(--away-text); }
+.match-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.match-sub b { color: var(--text); font-weight: 600; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+.dot.h { background: var(--home); } .dot.d { background: var(--draw); } .dot.a { background: var(--away); }
+.chev { color: var(--muted); font-size: 12px; margin-left: auto; transition: transform .15s; }
+details[open] .chev { transform: rotate(180deg); }
+.detail { padding: 0 16px 16px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 20px; }
+@media (max-width: 620px) { .detail { grid-template-columns: 1fr; } }
+h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 6px 0 8px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.scores td { padding: 5px 0; border-bottom: 1px solid var(--border); }
+.scores td:last-child { text-align: right; color: var(--muted); }
+.heat { table-layout: fixed; font-size: 12px; }
+.heat th { color: var(--muted); font-weight: 500; padding: 4px 0; text-align: center; }
+.heat td { text-align: center; padding: 7px 0; border: 2px solid var(--surface); border-radius: 6px; }
+.axis { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+.xg { font-size: 14px; margin: 2px 0 10px; }
+.big3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 12px; }
+.big3 > div { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+.big3 .lab { font-size: 12px; color: var(--muted); line-height: 1.3; overflow-wrap: anywhere; min-height: 2.6em; }
+.big3 .val { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pickers { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: end; margin-bottom: 14px; }
+label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+select {
+  width: 100%; font: inherit; line-height: 1.3; color: var(--text); background-color: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 34px 10px 12px;
+  /* One box in every browser: drop the native control and draw the chevron ourselves. */
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238a93a3' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 8px;
+}
+.swap { font: inherit; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.pad { padding: 16px; }
+.note { color: var(--muted); font-size: 13px; }
+.note.lead { margin: 0 0 12px; }
+.legend { display: block; margin-top: 4px; }
+.linkbtn { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+.linkbtn:focus-visible, .ghost:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* Secondary actions (copy link, show columns): quiet text buttons, not pills. */
+.ghost { font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); background: none;
+  border: 0; border-radius: 6px; padding: 4px 2px; cursor: pointer; }
+.ghost:hover { text-decoration: underline; }
+/* View switches (Predicted / Current): one joined control. */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; padding: 2px; background: var(--surface-2); gap: 2px; }
+.seg button { font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); background: none; border: 0;
+  border-radius: 8px; padding: 5px 14px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.seg button:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.toolbar .ghost { margin-left: auto; white-space: nowrap; }
+@media (max-width: 380px) { .seg button { padding: 5px 11px; } }
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; }
+.cols-toggle { display: none; }
+@media (max-width: 560px) { #table .cols-toggle { display: inline-block; } .all-cols .sim .wide { display: table-cell; } }
+@media (max-width: 620px) { #record .cols-toggle { display: inline-block; } .all-cols .record .wide { display: table-cell; } }
+.error-panel { padding: 20px 16px; text-align: center; }
+.error-panel p { margin: 0 0 10px; }
+.callout { font-size: 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 0 0 12px; }
+.callout a { color: var(--accent); font-weight: 600; }
+.heat td:focus-visible { outline: 3px solid var(--focus); outline-offset: -2px; }
+.cell-value { min-height: 1.4em; font-weight: 600; color: var(--text); }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.stats > div { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.stats .val { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 420px) { .stats:not(.three) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.record { font-size: 14px; }
+.record th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+.record td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.record .num { text-align: right; }
+#record h2 { font-size: 18px; margin: 22px 0 8px; }
+.record tbody tr.pick-gw:hover td { background: var(--surface-2); }
+#record h3 { margin-top: 18px; }
+.sim { font-size: 14px; font-variant-numeric: tabular-nums; }
+.sim th { color: var(--muted); font-weight: 600; font-size: 12px; padding: 10px 4px 8px; text-align: right;
+  border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: bottom; }
+.sim tbody tr:hover td { box-shadow: inset 0 0 0 999px rgb(127 127 127 / 6%); }
+.sim th.l, .sim td.l { text-align: left; }
+.sim td { padding: 6px 4px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.sim td.p { min-width: 46px; border-radius: 6px; border: 2px solid var(--surface); }
+.sim .rng { display: block; font-size: 11px; color: var(--muted); }
+.sim .team { font-weight: 600; }
+.sim tr.cut td { border-bottom: 2px solid var(--muted); }
+/* Inner margin: first and last columns keep clear of the card edge at every width. */
+.sim th:first-child, .sim td:first-child, .record th:first-child, .record td:first-child { padding-left: 14px; }
+.sim th:last-child, .sim td:last-child, .record th:last-child, .record td:last-child { padding-right: 14px; }
+@media (max-width: 560px) { .sim .wide { display: none; } .sim { font-size: 13px; } .sim td.p { min-width: 36px; }
+  .sim th, .sim td { padding-left: 3px; padding-right: 3px; } }
+.sim .short { display: none; }
+@media (max-width: 380px) {  /* every default column fits at 320px without sideways scrolling */
+  .sim { font-size: 12px; } .sim th, .sim td { padding-left: 2px; padding-right: 2px; } .sim td.p { min-width: 32px; } .sim td.team { white-space: normal; line-height: 1.25; }
+  .sim th:first-child, .sim td:first-child { padding-left: 9px; } .sim th:last-child, .sim td:last-child { padding-right: 9px; }
+  .sim th { font-size: 11px; }
+  /* short heading on screen; the full word stays readable by screen readers (not display:none) */
+  .sim .full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .sim .short { display: inline; } }
+.stats.three { grid-template-columns: repeat(3, 1fr); }
+.record tbody tr.pick-gw { cursor: pointer; }
+.record tfoot td { font-weight: 600; border-bottom: 0; }
+.tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
+.gws { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.gws button { font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.gws button[aria-pressed="true"] { color: var(--surface); background: var(--text); border-color: var(--text); }
+.gws button:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.mrow { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.mrow:last-child { border-bottom: 0; }
+.mtop { display: flex; gap: 10px; align-items: baseline; }
+.mtop .teams { font-weight: 600; flex: 1; min-width: 0; }
+.mtop .res { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mrow .bar span { opacity: .28; } .mrow .bar span.won { opacity: 1; }
+.mbot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.chip { font-size: 12px; font-weight: 600; border-radius: 6px; padding: 1px 6px; margin-left: 4px; white-space: nowrap; }
+.chip.ok { color: var(--good); background: var(--good-bg); } .chip.no { color: var(--bad); border: 1px solid var(--border); }
+.record .nowrap { white-space: nowrap; }
+@media (max-width: 620px) {
+  .record { font-size: 13px; }
+  .record th, .record td { padding: 8px 4px; }
+  .record .wide { display: none; }
+  .record th:first-child, .record td:first-child { padding-left: 14px; }
+  /* the last column is hidden here, so the margin goes on the last one shown */
+  .record :is(th, td):has(+ .wide:last-child), .record th:last-child:not(.wide), .record td:last-child:not(.wide) { padding-right: 14px; }
+}
+.scroll { overflow-x: auto; }
+.prose p, .prose li { max-width: 68ch; }
+.prose h2 { font-size: 17px; margin: 18px 0 6px; }
+footer { color: var(--muted); font-size: 12px; margin-top: 28px; }
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow" id="season"></p>
+    <h1>Premier League Predictor</h1>
+    <p class="sub" id="freshness" aria-live="polite">Loading…</p>
+  </header>
+
+  <nav role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-next" aria-controls="next" aria-selected="true">Matches</button>
+    <button role="tab" id="tab-custom" aria-controls="custom" aria-selected="false">Predict</button>
+    <button role="tab" id="tab-table" aria-controls="table" aria-selected="false">Table</button>
+    <button role="tab" id="tab-record" aria-controls="record" aria-selected="false" aria-label="Track record"><span class="lg">Track record</span><span class="sm" aria-hidden="true">Record</span></button>
+    <button role="tab" id="tab-about" aria-controls="about" aria-selected="false">About</button>
+  </nav>
+
+  <section id="next" role="tabpanel" aria-labelledby="tab-next"></section>
+
+  <section id="custom" role="tabpanel" aria-labelledby="tab-custom" hidden>
+    <p class="note lead"><b>Hypothetical match-up</b>: any two teams, if they met today. Real fixtures in
+      <b>Matches</b> also use the latest news, so they can differ a little.</p>
+    <div class="pickers">
+      <div><label for="home">Home</label><select id="home"></select></div>
+      <button class="swap" id="swap" type="button" aria-label="Swap home and away">⇄</button>
+      <div><label for="away">Away</label><select id="away"></select></div>
+    </div>
+    <div class="toolbar"><button type="button" class="ghost" id="copy-link">Copy link to this match-up</button>
+      <span class="note" id="copy-note" aria-live="polite"></span></div>
+    <div class="card" id="custom-out"></div>
+    <p class="note">Probabilities for a match played today at the home side's ground.</p>
+  </section>
+
+  <section id="table" role="tabpanel" aria-labelledby="tab-table" hidden></section>
+  <section id="record" role="tabpanel" aria-labelledby="tab-record" hidden></section>
+
+  <section id="about" role="tabpanel" aria-labelledby="tab-about" hidden>
+    <div class="card pad prose">
+      <h2>What you're looking at</h2>
+      <p>For every Premier League match: the probability of a home win, a draw and an away win,
+        each team's expected goals, and the chance of every exact score. Predictions are refreshed
+        every day as results come in.</p>
+      <h2>How to read it</h2>
+      <ul>
+        <li><b>Probabilities, not certainties.</b> A 60% favourite fails to win about four times in ten.</li>
+        <li><b>The score pick</b> ("if Chelsea win: 2–1") is the most likely score <i>if</i> the most likely result
+          happens. Exact scores are hard: even the best pick comes true only about one time in nine.
+          The single most likely score overall is 1–1 in most matches, because a draw has few ways to happen
+          and they bunch up there, while a win is spread across many scores.</li>
+        <li><b>Expected goals</b> is the average number of goals a team would score if the match were played many times.</li>
+      </ul>
+      <h2>How good is it?</h2>
+      <p>Every prediction is saved before kick-off and scored afterwards; see <b>Track record</b>.
+        In tests on more than 2,700 past Premier League matches, the predictions were close to the
+        bookmakers' in accuracy.</p>
+      <h2>Small print</h2>
+      <p>For information and entertainment, not betting advice. Results and fixtures from
+        <a href="https://www.football-data.co.uk" rel="noopener">football-data.co.uk</a> and
+        <a href="https://github.com/openfootball" rel="noopener">openfootball</a>.</p>
+    </div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const pct = (x) => `${Math.round(x * 100)}%`;
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmtDate = (iso, opts = { weekday: "short", day: "numeric", month: "short" }) =>
+    new Date(iso + "T12:00:00Z").toLocaleDateString(undefined, opts);
+
+  // Tabs and URL state. The address names the tab and, where it has one, the view inside it:
+  // #table/current, #record/7, #custom/Arsenal/Chelsea, #next/<fixture id>. Switching tab or view
+  // adds a history entry (Back retraces it); tweaking the match-up only updates the address.
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  const tabId = (t) => t.getAttribute("aria-controls");
+  const views = {};      // tab id -> current sub-state (array of strings)
+  const routes = {};     // tab id -> function(sub) restoring a view; set by each section's renderer
+  let restoring = false;
+  function setUrl(id, sub, push) {
+    views[id] = sub || [];
+    const active = tabs.find((t) => t.getAttribute("aria-selected") === "true");
+    if (restoring || !active || tabId(active) !== id) return;  // background renders don't touch the address
+    const h = "#" + [id, ...views[id]].map(encodeURIComponent).join("/");
+    if (location.hash === h) return;
+    try { history[push ? "pushState" : "replaceState"](null, "", h); } catch (e) {}
+  }
+  function selectTab(tab) {
+    tabs.forEach((t) => {
+      const on = t === tab;
+      t.setAttribute("aria-selected", on);
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(tabId(t)).hidden = !on;
+    });
+  }
+  function select(tab) { selectTab(tab); setUrl(tabId(tab), views[tabId(tab)], true); }
+  function parseHash() {
+    const [id, ...sub] = location.hash.slice(1).split("/").map((x) => { try { return decodeURIComponent(x); } catch (e) { return x; } });
+    return { tab: tabs.find((t) => tabId(t) === id) || tabs[0], sub: sub.filter(Boolean) };
+  }
+  function restore() {
+    const { tab, sub } = parseHash();
+    restoring = true;
+    try {
+      selectTab(tab);
+      const id = tabId(tab);
+      if (routes[id]) {  // empty sub = the tab's default view
+        try { routes[id](sub); }
+        catch (e) { delete routes[id]; sectionFailed(id === "custom" ? "#custom-out" : "#" + id, e); }
+      }
+    } finally {
+      restoring = false;
+    }
+  }
+  window.addEventListener("popstate", restore);
+  tabs.forEach((t, i) => {
+    t.addEventListener("click", () => select(t));
+    t.addEventListener("keydown", (e) => {
+      const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (d) { const n = tabs[(i + d + tabs.length) % tabs.length]; n.focus(); select(n); }
+    });
+  });
+  selectTab(parseHash().tab);
+
+  // Heat cells: text colour chosen from the actual blended background (WCAG AA 4.5:1). If neither dark nor
+  // white text reaches 4.5:1 at the requested shade, the shade moves to the nearest one where one does.
+  const rootCss = () => getComputedStyle(document.documentElement);
+  const rgbOf = (v) => {
+    v = v.trim();
+    if (v.startsWith("#")) { const h = v.length === 4 ? v.replace(/^#(.)(.)(.)$/, "#$1$1$2$2$3$3") : v;
+      return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); }
+    return v.split(/[\s,]+/).map(Number);
+  };
+  const lum = (c) => {
+    const f = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+  };
+  const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+  const TEXT = { dark: [17, 20, 26], light: [255, 255, 255] };
+  function heatStyle(varName, alpha) {
+    const css = rootCss(), base = rgbOf(css.getPropertyValue("--surface")), tint = rgbOf(css.getPropertyValue(varName));
+    const mix = (a) => base.map((b, i) => Math.round(b + (tint[i] - b) * a));
+    const best = (a) => {
+      const bg = mix(a), d = contrast(bg, TEXT.dark), l = contrast(bg, TEXT.light);
+      return d >= l ? { c: TEXT.dark, r: d } : { c: TEXT.light, r: l };
+    };
+    let a = alpha, b = best(a);
+    if (b.r < 4.5) {  // nearest shade (up or down) where some text colour passes
+      for (let step = 0.01; step <= 1; step += 0.01) {
+        const lo = Math.max(0, alpha - step), hi = Math.min(1, alpha + step);
+        if (best(lo).r >= 4.5) { a = lo; break; }
+        if (best(hi).r >= 4.5) { a = hi; break; }
+      }
+      b = best(a);
+    }
+    const strong = b.c === TEXT.light;
+    return `background:rgb(${mix(a).join(",")});color:rgb(${b.c.join(",")})${strong ? ";font-weight:600" : ""}`;
+  }
+
+  function bar(p) {
+    return `<div class="bar" aria-hidden="true"><span class="h" style="width:${p[0] * 100}%"></span>` +
+      `<span class="d" style="width:${p[1] * 100}%"></span><span class="a" style="width:${p[2] * 100}%"></span></div>`;
+  }
+  function outcomes(m) {
+    const col = (cls, who, p) => `<div class="${cls}"><span class="who">${who}</span><span class="pc">${pct(p)}</span></div>`;
+    return `<div class="out3">${col("h", esc(m.home), m.p[0])}${col("d", "Draw", m.p[1])}${col("a", esc(m.away), m.p[2])}</div>`;
+  }
+  function heat(grid, home, away) {
+    const max = Math.max(...grid.flat());
+    let h = `<table class="heat" aria-label="Probability of each score, ${esc(home)} goals down, ${esc(away)} goals across">` +
+      `<tr><th></th>${grid[0].map((_, j) => `<th scope="col">${j}</th>`).join("")}</tr>`;
+    grid.forEach((row, i) => {
+      h += `<tr><th scope="row">${i}</th>` + row.map((v, j) => {
+        const label = `${esc(home)} ${i}–${j} ${esc(away)}: ${(v * 100).toFixed(1)}%`;
+        return `<td tabindex="0" title="${label}" aria-label="${label}" data-label="${label}" ` +
+          `style="${heatStyle("--heat", 0.06 + 0.84 * (v / max))}">${v < 0.005 ? "·" : (v * 100).toFixed(0)}</td>`;
+      }).join("") + "</tr>";
+    });
+    return h + `</table><p class="axis">${esc(home)} goals ↓ · ${esc(away)} goals → · percent. ` +
+      `· = under 0.5%. Tap a cell for the exact value.</p><p class="axis cell-value" aria-live="polite"></p>`;
+  }
+  // "If Chelsea win: 2–1": the likeliest score within the most likely result.
+  function pickLabel(m) {
+    const who = m.pick.result === "home" ? m.home : m.pick.result === "away" ? m.away : null;
+    return who ? `if ${esc(who)} win` : "if it's a draw";
+  }
+  function pickScore(m) { return `${m.pick.score[0]}–${m.pick.score[1]}`; }
+  // Chance of the picked score itself (not the share of that result's wins it accounts for).
+  function pickChance(m) {
+    const k = { home: 0, draw: 1, away: 2 }[m.pick.result];
+    return m.pick.p_given * m.p[k];
+  }
+  const pct1 = (x) => `${Math.round(x * 100)}%`;
+
+  function detail(m) {
+    const scores = m.top.map(([h, a, p]) => `<tr><td>${h}–${a}</td><td>${(p * 100).toFixed(1)}%</td></tr>`).join("");
+    return `<div class="detail"><div><h3>Most likely exact scores</h3><table class="scores">${scores}</table></div>` +
+      `<div><h3>Scores up to 5 goals each</h3>${heat(m.grid, m.home, m.away)}` +
+      (m.other >= 0.0005 ? `<p class="axis">Any other score (6+ goals for either side): ${(m.other * 100).toFixed(1)}%</p>` : "") +
+      `</div></div>`;
+  }
+  function big3(m) {
+    return `<div class="big3"><div><div class="lab">${esc(m.home)} win</div><div class="val">${pct(m.p[0])}</div></div>` +
+      `<div><div class="lab">Draw</div><div class="val">${pct(m.p[1])}</div></div>` +
+      `<div><div class="lab">${esc(m.away)} win</div><div class="val">${pct(m.p[2])}</div></div></div>`;
+  }
+
+  function openFixture(id) {
+    const d = document.getElementById(id);
+    if (!d) return;
+    d.open = true;
+    d.scrollIntoView({ behavior: restoring ? "auto" : "smooth", block: "start" });
+  }
+  routes.next = ([id]) => openFixture(id);
+
+  function renderNext(data) {
+    const el = $("#next");
+    if (!data.fixtures.length) {
+      el.innerHTML = `<div class="card empty">No Premier League fixtures scheduled in the next few days.<br>` +
+        `Try a match-up in <button type="button" class="linkbtn" data-tab="custom">Predict</button>.</div>`;
+      return;
+    }
+    let lastDate = "";
+    el.innerHTML = data.fixtures.map((m) => {
+      const head = m.date !== lastDate ? `<h3>${fmtDate(m.date, { weekday: "long", day: "numeric", month: "long" })}</h3>` : "";
+      lastDate = m.date;
+      return head + `<details class="card" id="${fixtureId(m)}" data-fixture="${fixtureId(m)}"><summary><div class="match-head">` +
+        `<span class="teams">${esc(m.home)}<span class="vs">v</span>${esc(m.away)}</span>` +
+        `<span class="chev" aria-hidden="true">▾</span></div>${outcomes(m)}${bar(m.p)}` +
+        `<div class="match-sub">Score pick <b>${pickScore(m)}</b> (${pct1(pickChance(m))} chance) · xG ${m.xg[0].toFixed(1)}–${m.xg[1].toFixed(1)}</div></summary>` +
+        detail(m) + `</details>`;
+    }).join("");
+  }
+
+  // On phones some columns are hidden; this keeps them reachable.
+  function colsToggle(section) {
+    const on = section.classList.contains("all-cols");
+    return `<button type="button" class="ghost cols-toggle" aria-pressed="${on}">${on ? "Fewer columns" : "All columns"}</button>`;
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest(".cols-toggle");
+    if (!b) return;
+    const on = b.getAttribute("aria-pressed") !== "true";
+    b.closest("section").classList.toggle("all-cols", on);
+    b.closest("section").querySelectorAll(".cols-toggle").forEach((x) => {
+      x.setAttribute("aria-pressed", String(on)); x.textContent = on ? "Fewer columns" : "All columns";
+    });
+  });
+
+  function fixtureId(f) { return `fx-${f.date}-${f.home}-${f.away}`.replace(/[^A-Za-z0-9-]/g, "_"); }
+
+  function renderCustom(data) {
+    const home = $("#home"), away = $("#away");
+    const opts = data.teams.map((t) => `<option>${esc(t)}</option>`).join("");
+    home.innerHTML = opts; away.innerHTML = opts;
+    home.value = data.teams[0]; away.value = data.teams[1];
+    function draw() {
+      const out = $("#custom-out");
+      if (home.value === away.value) {
+        out.innerHTML = `<div class="empty">Pick two different teams.</div>`;
+        return;
+      }
+      const m = { home: home.value, away: away.value, ...data.matchups[`${home.value}|${away.value}`] };
+      const fx = data.fixtures.find((f) => f.home === m.home && f.away === m.away);
+      const link = fx ? `<p class="callout">This match is scheduled for ` +
+        `${fmtDate(fx.date, { weekday: "short", day: "numeric", month: "short" })}: the forecast for the real ` +
+        `fixture is <a href="#next" data-open="${esc(fixtureId(fx))}">in Matches</a> ` +
+        `(${esc(fx.home)} ${pct1(fx.p[0])} · draw ${pct1(fx.p[1])} · ${esc(fx.away)} ${pct1(fx.p[2])}).</p>` : "";
+      setUrl("custom", [m.home, m.away], false);
+      out.innerHTML = `<div class="pad">${link}${big3(m)}${bar(m.p)}` +
+        `<p class="xg">Expected goals: <b>${esc(m.home)} ${m.xg[0].toFixed(2)} – ${m.xg[1].toFixed(2)} ${esc(m.away)}</b><br>` +
+        `Score pick: <b>${pickScore(m)}</b>, a ${pct1(pickChance(m))} chance.</p>` +
+        `<p class="note">The pick is the likeliest score ${pickLabel(m)}, the most likely result. Exact scores are ` +
+        `rarely more than a 1-in-8 chance, even for the best pick.</p></div>` +
+        detail(m);
+    }
+    routes.custom = ([h, a]) => {
+      if (data.teams.includes(h) && data.teams.includes(a)) { home.value = h; away.value = a; draw(); }
+    };
+    home.addEventListener("change", draw); away.addEventListener("change", draw);
+    $("#swap").addEventListener("click", () => { [home.value, away.value] = [away.value, home.value]; draw(); });
+    draw();
+  }
+
+  const of = (share, n) => `${Math.round(share * n)} of ${n}`;
+  function stats(s) {
+    return `<div class="stats">` +
+      `<div><div class="note">Matches scored</div><div class="val">${s.matches}</div></div>` +
+      `<div><div class="note">Average RPS</div><div class="val">${s.rps.toFixed(3)}</div></div>` +
+      `<div><div class="note">Result called right</div><div class="val">${pct(s.accuracy)}</div>` +
+      `<div class="note">${of(s.accuracy, s.matches)}</div></div>` +
+      `<div><div class="note">Exact score right</div><div class="val">${pct(s.exact)}</div>` +
+      `<div class="note">${of(s.exact, s.matches)}</div></div></div>`;
+  }
+
+  function baselines(c) {
+    // One table, every row on the same matches: those with bookmaker prices (the favourite needs them).
+    if (!c.matches) return "";
+    const row = (name, acc, rps, exact, bold = false) => {
+      const b = (x) => bold ? `<b>${x}</b>` : x;
+      return `<tr><td>${b(name)}</td><td class="num">${b(pct(acc))}</td>` +
+        `<td class="num">${rps === null ? "–" : b(rps.toFixed(3))}</td><td class="num wide">${exact === null ? "–" : b(pct(exact))}</td></tr>`;
+    };
+    const rows = [row("This model", c.accuracy, c.rps, c.exact, true)];
+    if (c.with_market) rows.push(row("Bookmakers' favourite", c.accuracy_favourite, c.rps_market, null));
+    rows.push(row("Always the home team", c.accuracy_home, null, null));
+    rows.push(row("Always 1–1", c.accuracy_draw, null, c.exact_1_1));
+    const note = c.left_out ? ` ${c.left_out} match${c.left_out > 1 ? "es" : ""} with no favourite to compare against left out.` : "";
+    return `<h3>Compared with simple rules</h3><div class="card scroll"><table class="record"><thead><tr><th></th>` +
+      `<th class="num">Result right</th><th class="num">RPS</th><th class="num wide">Exact score</th>` +
+      `</tr></thead><tbody>` + rows.join("") + `</tbody></table></div>` +
+      `<p class="note">All rows on the same ${c.matches} matches.${note}</p>`;
+  }
+
+  function matchRows(matches) {
+    return `<div class="card">` + matches.map((m) => {
+      const seg = ["h", "d", "a"].map((c, i) =>
+        `<span class="${c}${i === m.outcome ? " won" : ""}" style="width:${m.p[i] * 100}%"></span>`).join("");
+      return `<div class="mrow"><div class="mtop"><span class="meta">${fmtDate(m.date)}</span>` +
+        `<span class="teams">${esc(m.home)} – ${esc(m.away)}</span><span class="res">${esc(m.result).replace("-", "–")}</span></div>` +
+        `<div class="bar" aria-hidden="true">${seg}</div>` +
+        `<div class="mbot"><span>Home ${pct1(m.p[0])} · Draw ${pct1(m.p[1])} · Away ${pct1(m.p[2])}</span>` +
+        `<span>Pick ${esc(m.pick).replace("-", "–")}` +
+        `<span class="chip ${m.ok ? "ok" : "no"}">${m.ok ? "✓" : "✗"} result</span>` +
+        (m.exact ? `<span class="chip ok">✓ exact score</span>` : "") + `</span></div></div>`;
+    }).join("") + `</div>`;
+  }
+
+  function renderTable(data) {
+    const el = $("#table"), t = data.table;
+    if (!t || !t.predicted.length) { el.innerHTML = `<div class="card empty">No table available.</div>`; return; }
+    const fmt = (p) => p <= 0 ? "–" : p < 0.005 ? "<1%" : p > 0.995 && p < 1 ? ">99%" : pct(p);
+    const cell = (p, bad, cls = "") =>
+      `<td class="p ${cls}" style="${heatStyle(bad ? "--heat-bad" : "--heat", Math.min(p, 1) * 0.5)}">${fmt(p)}</td>`;
+    const cut = (i) => i === 3 || i === 16 ? ' class="cut"' : "";
+    const through = fmtDate(data.results_through, { day: "numeric", month: "short" });
+
+    const predicted = () => `<p class="note lead"><b>Predicted final table</b> from 10,000 simulated seasons. Teams whose
+        ranges overlap could easily swap places.<span class="legend"><b>–</b> none in 10,000 seasons ·
+        <b>&lt;1%</b> rare, not impossible</span></p>` +
+      `<div class="card scroll"><table class="sim"><thead><tr><th class="l">#</th><th class="l">Team</th>` +
+      `<th><span class="full">Exp. points</span><span class="short" aria-hidden="true">Exp. pts</span><span class="rng">80% range</span></th><th>Title</th><th>Top 4</th><th class="wide">Top 5</th>` +
+      `<th><span class="full">Relegated</span><span class="short" aria-hidden="true">Releg.</span></th></tr></thead><tbody>` +
+      t.predicted.map((r, i) => `<tr${cut(i)}><td class="l">${i + 1}</td><td class="l team">${esc(r.team)}</td>` +
+        `<td>${Math.round(r.exp_pts)}<span class="rng">${r.range[0]}–${r.range[1]}</span></td>` +
+        cell(r.title) + cell(r.top4) + cell(r.top5, false, "wide") + cell(r.relegation, true) + `</tr>`).join("") +
+      `</tbody></table></div>` +
+      `<p class="note"><b>Exp. points</b>: average final points; below it, the range 8 in 10 simulated seasons ended in.
+        Each remaining match is played out with the predicted probabilities, allowing for teams turning out better or
+        worse than they look now. <b>–</b> means it didn't happen in any of the 10,000 seasons; <b>&lt;1%</b> means it
+        happened in fewer than 1 in 100. Very unlikely, not impossible.</p>
+        <p class="note"><b>How reliable?</b> Replayed on 11 past seasons from various points in the season, about 8 in 10 teams finished
+        inside their range, and top-4 and relegation chances matched how often those things happened. Title chances are
+        harder to check: there is only one champion a season.</p>`;
+
+    const current = () => `<p class="note"><b>Current table</b> after ${t.played} matches (results through ${through}).
+        No predictions here.</p>` +
+      `<div class="card scroll"><table class="sim"><thead><tr><th class="l">#</th><th class="l">Team</th>` +
+      `<th>P</th><th class="wide">W</th><th class="wide">D</th><th class="wide">L</th><th class="wide">GF</th>` +
+      `<th class="wide">GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>` +
+      t.current.map((r, i) => `<tr${cut(i)}><td class="l">${i + 1}</td><td class="l team">${esc(r.team)}</td>` +
+        `<td>${r.played}</td><td class="wide">${r.won}</td><td class="wide">${r.drawn}</td><td class="wide">${r.lost}</td>` +
+        `<td class="wide">${r.gf}</td><td class="wide">${r.ga}</td><td>${r.gd > 0 ? "+" : ""}${r.gd}</td>` +
+        `<td><b>${r.pts}</b></td></tr>`).join("") +
+      `</tbody></table></div>`;
+
+    el.innerHTML = `<div class="toolbar"><div class="seg" role="group" aria-label="Table view">` +
+      `<button type="button" data-view="predicted" aria-pressed="true">Predicted</button>` +
+      `<button type="button" data-view="current" aria-pressed="false">Current</button></div>${colsToggle(el)}</div>` +
+      `<div id="table-view"></div>`;
+    const show = (v, push) => {
+      v = v === "current" ? "current" : "predicted";
+      el.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
+      $("#table-view").innerHTML = v === "current" ? current() : predicted();
+      setUrl("table", v === "predicted" ? [] : [v], push);
+    };
+    routes.table = ([v]) => show(v, false);
+    el.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view, true)));
+    show("predicted", false);
+  }
+
+  function renderRecord(data) {
+    const norm = (r) => ({ ...r, summary: (r && r.summary) || {}, matches: (r && r.matches) || [], by_gw: (r && r.by_gw) || [],
+      comparison: (r && r.comparison) || {} });
+    const live = norm(data.track_record), rec = norm(data.reconstructed), el = $("#record");
+    const day = (d) => fmtDate(d, { day: "numeric", month: "short" });
+    const gws = [...rec.by_gw.map((g) => ({ ...g, recon: true })), ...live.by_gw.map((g) => ({ ...g, recon: false }))]
+      .sort((x, y) => x.gw - y.gw);
+    const matches = [...rec.matches, ...live.matches];
+    const tag = `<span class="tag">reconstructed</span>`;
+
+    const liveStatus = () => {
+      if (live.matches.length) return stats(live.summary);
+      const since = live.since ? `Logging started on ${day(live.since)}. ` : "";
+      const first = live.first_match ? `The first logged matches (from ${day(live.first_match)}) are scored ` : "Matches are scored ";
+      return `<div class="card empty">${since}${first}once their results are published.
+        Results currently run through ${day(data.results_through)}.</div>`;
+    };
+
+    const summary = () => {
+      let html = `<p class="note lead">Saved before match day, scored after. <b>RPS</b>: 0 is perfect, about 0.20 is
+        typical for good forecasts.</p>` +
+        `<h3>Live</h3>` + liveStatus();
+      if (!gws.length) return html;
+      const size = (g) => (data.gw_sizes || {})[g.gw];
+      const partial = (g) => size(g) && g.matches < size(g) ? ` <span class="tag">${g.matches} of ${size(g)} played</span>` : "";
+      const row = (g) => `<tr class="pick-gw" data-gw="${g.gw}"><td><button type="button" class="linkbtn" data-gw="${g.gw}">` +
+        `GW${g.gw}</button>${g.recon ? tag : ""}${partial(g)}</td>` +
+        `<td class="num">${pct(g.accuracy)}</td><td class="num">${pct(g.exact)}</td><td class="num wide">${g.rps.toFixed(3)}</td></tr>`;
+      const total = (label, s) => s && s.matches ? `<tr><td>${label}</td><td class="num">${pct(s.accuracy)}</td>` +
+        `<td class="num">${pct(s.exact)}</td><td class="num wide">${s.rps.toFixed(3)}</td></tr>` : "";
+      html += `<h3>By gameweek</h3><div class="card scroll"><table class="record"><thead><tr><th>Gameweek</th>` +
+        `<th class="num">Result right</th><th class="num">Exact score</th><th class="num wide">RPS</th></tr></thead>` +
+        `<tbody>${gws.map(row).join("")}</tbody><tfoot>` +
+        total(`Reconstructed (${rec.summary.matches || 0})`, rec.summary) + total(`Live (${live.summary.matches || 0})`, live.summary) +
+        `</tfoot></table></div>`;
+      if (rec.matches.length) {
+        html += `<p class="note"><b>Reconstructed</b>: played before live logging began; predictions recreated afterwards
+          from information available before each match. Ten matches per gameweek is a tiny sample.</p>`;
+      }
+      const base = live.matches.length ? live.comparison : rec.comparison;
+      return html + baselines(base).replace("<h3>Compared with simple rules",
+        `<h3>Compared with simple rules, ${live.matches.length ? "live" : "reconstructed"}`);
+    };
+
+    const gameweek = (gw) => {
+      const g = gws.find((x) => x.gw === gw), n = (data.gw_sizes || {})[gw];
+      const status = g.recon ? `${tag} Recreated afterwards, not published before kick-off.`
+        : `<span class="tag">live</span> Saved before kick-off.`;
+      return `<p class="note"><b>GW${gw}</b> · ${g.matches}${n ? ` of ${n}` : ""} matches scored · ${status}</p>` +
+        `<div class="stats three">` +
+        `<div><div class="note">Result right</div><div class="val">${pct(g.accuracy)}</div><div class="note">${of(g.accuracy, g.matches)}</div></div>` +
+        `<div><div class="note">Exact score</div><div class="val">${pct(g.exact)}</div><div class="note">${of(g.exact, g.matches)}</div></div>` +
+        `<div><div class="note">RPS</div><div class="val">${g.rps.toFixed(3)}</div></div></div>` +
+        matchRows(matches.filter((m) => m.gw === gw));
+    };
+
+    el.innerHTML = `<div class="gws" role="group" aria-label="Track record view">` +
+      `<button type="button" data-view="summary" aria-pressed="false">Summary</button>` +
+      gws.map((g) => `<button type="button" data-view="${g.gw}" aria-pressed="false">GW${g.gw}</button>`).join("") +
+      `</div><div id="record-view"></div>`;
+    const view = $("#record-view");
+    const show = (v, push) => {
+      v = gws.some((g) => String(g.gw) === String(v)) ? String(v) : "summary";
+      el.querySelectorAll(".gws button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
+      view.innerHTML = v === "summary" ? `<div class="toolbar">${colsToggle(el)}</div>` + summary() : gameweek(+v);
+      view.querySelectorAll("tr.pick-gw").forEach((r) => r.addEventListener("click", (e) => {
+        if (!e.target.closest("button")) show(r.dataset.gw, true);
+      }));
+      view.querySelectorAll("button[data-gw]").forEach((b) => b.addEventListener("click", () => show(b.dataset.gw, true)));
+      setUrl("record", v === "summary" ? [] : [v], push);
+      if (push) {  // a user action replaced the content they were on: keep keyboard focus in the view
+        const head = view.querySelector("p.note, h3");
+        if (head) { head.tabIndex = -1; head.focus(); }
+      }
+    };
+    routes.record = ([v]) => show(v, false);
+    el.querySelectorAll(".gws button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view, true)));
+    show("summary", false);
+  }
+
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-open]");
+    if (a) {
+      e.preventDefault();
+      selectTab(tabs.find((t) => tabId(t) === "next"));
+      setUrl("next", [a.dataset.open], true);
+      openFixture(a.dataset.open);
+      const d = document.getElementById(a.dataset.open);
+      if (d) d.querySelector("summary").focus();
+    }
+    const t = e.target.closest("[data-tab]");
+    if (t) { e.preventDefault(); select(tabs.find((x) => tabId(x) === t.dataset.tab)); }
+  });
+  const showCell = (e) => {
+    const td = e.target.closest("td[data-label]");
+    if (!td) return;
+    const out = td.closest("div").querySelector(".cell-value");
+    if (out) out.textContent = td.dataset.label;
+  };
+  document.addEventListener("click", showCell);
+  document.addEventListener("toggle", (e) => {
+    const d = e.target;
+    if (d.matches && d.matches("details[data-fixture]") && d.open && !restoring) setUrl("next", [d.dataset.fixture], false);
+  }, true);
+  document.addEventListener("focusin", showCell);
+
+  const shortDate = (d) => fmtDate(d, { day: "numeric", month: "short", year: "numeric" });
+  // A section that fails to render shows its own message; the others still work. Its route is
+  // dropped so restoring a view can't run the broken renderer again.
+  function sectionFailed(id, e) {
+    console.error(e);
+    $(id).innerHTML = `<div class="card error-panel" role="alert"><p>This section couldn't be shown. ` +
+      `The rest of the site is unaffected.</p></div>`;
+  }
+  function safely(render, id, data, route) {
+    try { render(data); }
+    catch (e) { delete routes[route]; sectionFailed(id, e); }
+  }
+  function load(retry) {
+    $("#freshness").textContent = "Loading…";
+    fetch("data.json", { cache: "no-cache" })
+      .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then((data) => {
+        const updated = new Date(data.generated).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+        $("#season").textContent = `${data.season} season`;
+        $("#freshness").innerHTML = `<span class="nw">Results through ${esc(shortDate(data.results_through))}</span> · ` +
+          `<span class="nw">predictions updated ${esc(updated)}</span>`;
+        $("#footer").textContent = "";
+        restoring = true;  // first renders set default views; they must not overwrite the address being restored
+        safely(renderNext, "#next", data, "next"); safely(renderCustom, "#custom-out", data, "custom");
+        safely(renderTable, "#table", data, "table"); safely(renderRecord, "#record", data, "record");
+        restore();
+        if (retry) {
+          const active = tabs.find((t) => t.getAttribute("aria-selected") === "true");
+          if (active) active.focus();
+        }
+      })
+      .catch(() => {
+        $("#freshness").textContent = "Couldn't load the latest predictions.";
+        const panel = `<div class="card error-panel" role="alert"><p>Couldn't load the latest predictions. ` +
+          `Check your connection and try again.</p><button type="button" class="ghost retry">Retry</button></div>`;
+        ["#next", "#table", "#record"].forEach((id) => { $(id).innerHTML = panel; });
+        $("#custom-out").innerHTML = panel;
+      });
+  }
+  document.addEventListener("click", (e) => { if (e.target.closest(".retry")) load(true); });
+  $("#copy-link").addEventListener("click", async () => {
+    const url = location.href, note = $("#copy-note");
+    try { await navigator.clipboard.writeText(url); note.textContent = "Link copied."; }
+    catch (e) { window.prompt("Copy this link:", url); note.textContent = ""; }
+    setTimeout(() => { note.textContent = ""; }, 2500);
+  });
+  load();
+})();
+</script>
+</body>
+</html>
